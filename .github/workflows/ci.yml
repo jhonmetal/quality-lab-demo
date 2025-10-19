@@ -114,7 +114,7 @@ jobs:
           echo ""
           echo "Ejecutando tests Selenium..."
           cd backend
-          mvn -Dtest=com.example.qualitydemo.SeleniumRegistrationTest test || echo "⚠️ Tests Selenium completados"
+          mvn -B -Pselenium-tests test -Dtest=com.example.qualitydemo.SeleniumRegistrationTest || echo "⚠️ Tests Selenium completados"
         continue-on-error: true
 
       # ========================================
