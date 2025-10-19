@@ -139,22 +139,34 @@ jobs:
       # ========================================
       - name: "⚡ Ejecutar pruebas de carga JMeter"
         run: |
-          echo "Instalando JMeter..."
-          sudo apt-get update -qq && sudo apt-get install -y jmeter -qq 2>/dev/null || true
+          echo "Instalando Apache JMeter 5.6.3 (binario oficial)..."
+          set -e
+          JMETER_VERSION="5.6.3"
+          JMETER_DIR="/tmp/apache-jmeter-${JMETER_VERSION}"
+          if [ ! -x "$JMETER_DIR/bin/jmeter" ]; then
+            echo "Descargando Apache JMeter ${JMETER_VERSION}..."
+            curl -sL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" -o /tmp/jmeter.tgz
+            tar -xzf /tmp/jmeter.tgz -C /tmp
+            chmod +x "$JMETER_DIR/bin/jmeter" || true
+          else
+            echo "JMeter ya presente en $JMETER_DIR"
+          fi
           mkdir -p test-results/jmeter
-          
+
           echo "Verificando que el servidor esté corriendo..."
           curl -v http://localhost:8080 || echo "⚠️ Servidor podría no estar disponible"
-          
-          echo ""
+
+          echo "Usando JMeter en: $JMETER_DIR/bin/jmeter"
+          echo "JMeter version:"; $JMETER_DIR/bin/jmeter --version || true
+
           echo "Ejecutando carga: 10 usuarios..."
-          jmeter -n -t tests/jmeter/load-10.jmx -l test-results/jmeter/results-10.jtl -j test-results/jmeter/jmeter-10.log || echo "⚠️ JMeter 10 usuarios completado"
-          
+          $JMETER_DIR/bin/jmeter -n -t tests/jmeter/load-10.jmx -l test-results/jmeter/results-10.jtl -j test-results/jmeter/jmeter-10.log || echo "⚠️ JMeter 10 usuarios completado"
+
           echo "Ejecutando carga: 100 usuarios..."
-          jmeter -n -t tests/jmeter/load-100.jmx -l test-results/jmeter/results-100.jtl -j test-results/jmeter/jmeter-100.log || echo "⚠️ JMeter 100 usuarios completado"
-          
+          $JMETER_DIR/bin/jmeter -n -t tests/jmeter/load-100.jmx -l test-results/jmeter/results-100.jtl -j test-results/jmeter/jmeter-100.log || echo "⚠️ JMeter 100 usuarios completado"
+
           echo "Ejecutando carga: 500 usuarios..."
-          jmeter -n -t tests/jmeter/load-500.jmx -l test-results/jmeter/results-500.jtl -j test-results/jmeter/jmeter-500.log || echo "⚠️ JMeter 500 usuarios completado"
+          $JMETER_DIR/bin/jmeter -n -t tests/jmeter/load-500.jmx -l test-results/jmeter/results-500.jtl -j test-results/jmeter/jmeter-500.log || echo "⚠️ JMeter 500 usuarios completado"
         continue-on-error: true
 
       # ========================================
