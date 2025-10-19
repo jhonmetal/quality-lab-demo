@@ -54,19 +54,36 @@ jobs:
           mvn spring-boot:run > /tmp/spring-boot.log 2>&1 &
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
-          echo "Esperando a que el servidor esté listo (máx 30 segundos)..."
           echo "Esperando a que el servidor esté listo (máx 90 segundos)..."
+
+          ready=0
           for i in {1..90}; do
-            if curl -f http://localhost:8080 > /dev/null 2>&1; then
-              echo "✅ Servidor Spring Boot listo!"
+            # 1) Check Spring Boot started message in the log (recommended)
+            if grep -q "Started .*QualityLabDemoApplication" /tmp/spring-boot.log 2>/dev/null; then
+              echo "✅ Found Spring Boot startup message in log"
+              ready=1
               break
             fi
-            echo "Intento $i/90: Esperando servidor..."
+
+            # 2) Fallback: try HTTP endpoint /register following redirects
+            status=$(curl -sS -o /dev/null -w "%{http_code}" -L http://localhost:8080/register || true)
+            if [ "$status" != "" ] && [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
+              echo "✅ HTTP check succeeded with status $status"
+              ready=1
+              break
+            fi
+
+            echo "Intento $i/90: esperando servidor... (log lines: $(wc -l < /tmp/spring-boot.log 2>/dev/null || echo 0))"
             sleep 1
           done
-          if ! curl -f http://localhost:8080 > /dev/null 2>&1; then
+
+          if [ "$ready" -ne 1 ]; then
             echo "❌ El servidor no respondió en 90 segundos"
-            cat /tmp/spring-boot.log
+            echo "--- /tmp/spring-boot.log (tail) ---"
+            tail -n 300 /tmp/spring-boot.log || true
+            echo "--- End log ---"
+            # show process list for debugging
+            ps aux | grep java || true
             exit 1
           fi
         timeout-minutes: 5
