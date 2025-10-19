@@ -20,8 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class SeleniumRegistrationTest {
     @Test
     public void testRegisterPageLoads() throws Exception {
-        // Wait for the Spring Boot app to be reachable before starting ChromeDriver
-        waitForServerUp("http://localhost:8080/register", Duration.ofSeconds(30));
+    // Wait for the Spring Boot app to be reachable before starting ChromeDriver
+    // Increased timeout because CI runners can be slower; allow up to 90 seconds
+    waitForServerUp("http://localhost:8080/register", Duration.ofSeconds(90));
 
         // Create a unique user data dir for this test run to avoid collisions in CI
         Path userDataDir = Files.createTempDirectory("selenium-user-data-");

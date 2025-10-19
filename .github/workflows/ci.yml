@@ -55,16 +55,17 @@ jobs:
           SERVER_PID=$!
           echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
           echo "Esperando a que el servidor esté listo (máx 30 segundos)..."
-          for i in {1..30}; do
+          echo "Esperando a que el servidor esté listo (máx 90 segundos)..."
+          for i in {1..90}; do
             if curl -f http://localhost:8080 > /dev/null 2>&1; then
               echo "✅ Servidor Spring Boot listo!"
               break
             fi
-            echo "Intento $i/30: Esperando servidor..."
+            echo "Intento $i/90: Esperando servidor..."
             sleep 1
           done
           if ! curl -f http://localhost:8080 > /dev/null 2>&1; then
-            echo "❌ El servidor no respondió en 30 segundos"
+            echo "❌ El servidor no respondió en 90 segundos"
             cat /tmp/spring-boot.log
             exit 1
           fi
