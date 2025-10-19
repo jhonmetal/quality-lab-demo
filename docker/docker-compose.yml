@@ -1,0 +1,25 @@
+version: '3.8'
+services:
+  sonarqube:
+    image: sonarqube:lts
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    networks:
+      - quality-net
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+  zap:
+    image: owasp/zap2docker-stable
+    command: zap.sh -daemon -host 0.0.0.0 -port 8090
+    ports:
+      - "8090:8090"
+    networks:
+      - quality-net
+  # Nota: la app puede ejecutarse localmente con mvn spring-boot:run si no se usa Docker
+networks:
+  quality-net:
+volumes:
+  sonarqube_data:
