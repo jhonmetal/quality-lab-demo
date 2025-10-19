@@ -2,6 +2,15 @@
 
 Plantilla para laboratorios de calidad de software (Spring Boot) — **Versión para curso de Maestría**
 
+## Entregables del Laboratorio
+
+Los entregables se ubican en la ruta Informe Grupo 1/
+
+- Informe Grupo 1/Grupo 1 - Laboratorio 1 quality-lab-demo.pdf
+- Informe Grupo 1/jacoco-report.zip
+- Informe Grupo 1/test-results.zip
+
+
 ## Resumen
 Este proyecto contiene una aplicación web simple en Java + Spring Boot con ejemplos y ejercicios listos para practicar herramientas de calidad: JUnit/JaCoCo, SonarQube, GitHub Actions, Selenium, Postman/Newman, JMeter y OWASP ZAP (opcional).
 
