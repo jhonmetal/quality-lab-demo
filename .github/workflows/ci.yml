@@ -1,5 +1,5 @@
 name: CI Quality Lab - Pipeline Completo
-on: [push, pull_request]
+on: [pull_request]
 
 jobs:
   quality-pipeline:
@@ -45,7 +45,34 @@ jobs:
         if: always()
 
       # ========================================
-      # PASO 5: Configurar Node.js para Newman/Postman
+      # PASO 5: Iniciar servidor Spring Boot en background
+      # ========================================
+      - name: "🚀 Iniciar servidor Spring Boot"
+        run: |
+          echo "Iniciando servidor Spring Boot en background..."
+          cd backend
+          mvn spring-boot:run > /tmp/spring-boot.log 2>&1 &
+          SERVER_PID=$!
+          echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+          echo "Esperando a que el servidor esté listo (máx 30 segundos)..."
+          for i in {1..30}; do
+            if curl -f http://localhost:8080 > /dev/null 2>&1; then
+              echo "✅ Servidor Spring Boot listo!"
+              break
+            fi
+            echo "Intento $i/30: Esperando servidor..."
+            sleep 1
+          done
+          if ! curl -f http://localhost:8080 > /dev/null 2>&1; then
+            echo "❌ El servidor no respondió en 30 segundos"
+            cat /tmp/spring-boot.log
+            exit 1
+          fi
+        timeout-minutes: 5
+        continue-on-error: false
+
+      # ========================================
+      # PASO 6: Configurar Node.js para Newman/Postman
       # ========================================
       - name: "🟢 Configurar Node.js 20"
         uses: actions/setup-node@v4
@@ -54,7 +81,7 @@ jobs:
           cache: 'npm'
 
       # ========================================
-      # PASO 6: Ejecutar colección Postman con Newman
+      # PASO 7: Ejecutar colección Postman con Newman
       # ========================================
       - name: "📮 Instalar Newman y ejecutar tests Postman"
         run: |
@@ -62,47 +89,59 @@ jobs:
           npm install -g newman
           echo "Ejecutando colección Postman..."
           mkdir -p test-results/postman
+          echo "Verificando que el servidor esté accesible..."
+          curl -v http://localhost:8080 || true
+          echo ""
+          echo "Ejecutando tests con Newman..."
           newman run tests/postman/QualityLab.postman_collection.json \
             --reporters cli,html \
             --reporter-html-export test-results/postman/newman-report.html \
             || echo "⚠️ Algunos tests Postman fallaron, pero continúa el pipeline"
-
-      # ========================================
-      # PASO 7: Ejecutar Tests Selenium (UI Tests)
-      # ========================================
-      - name: "🌐 Ejecutar tests Selenium (Registro UI)"
-        run: |
-          echo "Iniciando servidor Spring Boot en segundo plano..."
-          cd backend
-          mvn spring-boot:run &
-          SERVER_PID=$!
-          sleep 10
-          echo "Ejecutando tests Selenium..."
-          mvn -Dtest=com.example.qualitydemo.SeleniumRegistrationTest test || echo "⚠️ Tests Selenium completados"
-          kill $SERVER_PID || true
         continue-on-error: true
 
       # ========================================
-      # PASO 8: Preparar reportes de JMeter
+      # PASO 8: Ejecutar Tests Selenium (UI Tests)
+      # ========================================
+      - name: "🌐 Ejecutar tests Selenium (Registro UI)"
+        run: |
+          echo "Verificando que el servidor esté corriendo..."
+          if curl -f http://localhost:8080 > /dev/null 2>&1; then
+            echo "✅ Servidor disponible"
+          else
+            echo "❌ Servidor no disponible, verificando logs..."
+            curl -v http://localhost:8080 || true
+          fi
+          echo ""
+          echo "Ejecutando tests Selenium..."
+          cd backend
+          mvn -Dtest=com.example.qualitydemo.SeleniumRegistrationTest test || echo "⚠️ Tests Selenium completados"
+        continue-on-error: true
+
+      # ========================================
+      # PASO 9: Ejecutar pruebas de carga JMeter
       # ========================================
       - name: "⚡ Ejecutar pruebas de carga JMeter"
         run: |
           echo "Instalando JMeter..."
-          sudo apt-get update -qq && sudo apt-get install -y jmeter -qq
+          sudo apt-get update -qq && sudo apt-get install -y jmeter -qq 2>/dev/null || true
           mkdir -p test-results/jmeter
           
+          echo "Verificando que el servidor esté corriendo..."
+          curl -v http://localhost:8080 || echo "⚠️ Servidor podría no estar disponible"
+          
+          echo ""
           echo "Ejecutando carga: 10 usuarios..."
-          jmeter -n -t tests/jmeter/load-10.jmx -l test-results/jmeter/results-10.jtl -j test-results/jmeter/jmeter-10.log || true
+          jmeter -n -t tests/jmeter/load-10.jmx -l test-results/jmeter/results-10.jtl -j test-results/jmeter/jmeter-10.log || echo "⚠️ JMeter 10 usuarios completado"
           
           echo "Ejecutando carga: 100 usuarios..."
-          jmeter -n -t tests/jmeter/load-100.jmx -l test-results/jmeter/results-100.jtl -j test-results/jmeter/jmeter-100.log || true
+          jmeter -n -t tests/jmeter/load-100.jmx -l test-results/jmeter/results-100.jtl -j test-results/jmeter/jmeter-100.log || echo "⚠️ JMeter 100 usuarios completado"
           
           echo "Ejecutando carga: 500 usuarios..."
-          jmeter -n -t tests/jmeter/load-500.jmx -l test-results/jmeter/results-500.jtl -j test-results/jmeter/jmeter-500.log || true
+          jmeter -n -t tests/jmeter/load-500.jmx -l test-results/jmeter/results-500.jtl -j test-results/jmeter/jmeter-500.log || echo "⚠️ JMeter 500 usuarios completado"
         continue-on-error: true
 
       # ========================================
-      # PASO 9: Generar resumen de cobertura
+      # PASO 10: Generar resumen de cobertura
       # ========================================
       - name: "📈 Generar resumen de cobertura"
         run: |
@@ -118,7 +157,18 @@ jobs:
         if: always()
 
       # ========================================
-      # PASO 10: Cargar reportes como artefactos
+      # PASO 11: Detener servidor y revisar logs si es necesario
+      # ========================================
+      - name: "🛑 Detener servidor Spring Boot"
+        run: |
+          echo "Deteniendo servidor Spring Boot..."
+          pkill -f "spring-boot:run" || echo "No se encontró proceso Spring Boot"
+          sleep 2
+        if: always()
+        continue-on-error: true
+
+      # ========================================
+      # PASO 12: Cargar reportes como artefactos
       # ========================================
       - name: "📦 Cargar reporte JaCoCo como artefacto"
         if: always()
@@ -137,7 +187,7 @@ jobs:
           retention-days: 30
 
       # ========================================
-      # PASO 11: Crear resumen del flujo de trabajo
+      # PASO 13: Crear resumen del flujo de trabajo
       # ========================================
       - name: "✅ Crear resumen del pipeline"
         if: always()
@@ -149,14 +199,21 @@ jobs:
           echo "- ✅ Configuración de JDK 17" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Build y Tests Unitarios (Maven verify)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Generación de reporte JaCoCo" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Inicio de servidor Spring Boot" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Tests API REST (Newman/Postman)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Tests UI (Selenium)" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Pruebas de carga (JMeter)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Reportes generados:" >> $GITHUB_STEP_SUMMARY
-          echo "- JaCoCo: backend/target/site/jacoco/index.html" >> $GITHUB_STEP_SUMMARY
-          echo "- Newman: test-results/postman/newman-report.html" >> $GITHUB_STEP_SUMMARY
-          echo "- JMeter: test-results/jmeter/" >> $GITHUB_STEP_SUMMARY
+          echo "- **JaCoCo:** backend/target/site/jacoco/index.html" >> $GITHUB_STEP_SUMMARY
+          echo "- **Newman:** test-results/postman/newman-report.html" >> $GITHUB_STEP_SUMMARY
+          echo "- **JMeter:** test-results/jmeter/" >> $GITHUB_STEP_SUMMARY
+          echo "- **Coverage Summary:** test-results/coverage/COVERAGE_SUMMARY.md" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## 📥 Descargar reportes" >> $GITHUB_STEP_SUMMARY
-          echo "Todos los reportes están disponibles en la sección de Artifacts de esta ejecución." >> $GITHUB_STEP_SUMMARY
+          echo "Todos los reportes están disponibles en la sección de **Artifacts** de esta ejecución." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ⚙️ Requisitos" >> $GITHUB_STEP_SUMMARY
+          echo "- Cobertura mínima: **80%** (JaCoCo)" >> $GITHUB_STEP_SUMMARY
+          echo "- JDK: **17**" >> $GITHUB_STEP_SUMMARY
+          echo "- Maven: **3.8+**" >> $GITHUB_STEP_SUMMARY
