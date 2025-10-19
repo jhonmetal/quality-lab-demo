@@ -12,12 +12,17 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SeleniumRegistrationTest {
     @Test
     public void testRegisterPageLoads() throws Exception {
+        // Wait for the Spring Boot app to be reachable before starting ChromeDriver
+        waitForServerUp("http://localhost:8080/register", Duration.ofSeconds(30));
+
         // Create a unique user data dir for this test run to avoid collisions in CI
         Path userDataDir = Files.createTempDirectory("selenium-user-data-");
 
@@ -56,5 +61,27 @@ public class SeleniumRegistrationTest {
                 } catch (Exception ignore) {}
             }
         }
+    }
+
+    private static void waitForServerUp(String urlString, Duration timeout) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            try {
+                URL url = new URL(urlString);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setConnectTimeout(2000);
+                conn.setReadTimeout(2000);
+                conn.setRequestMethod("GET");
+                int code = conn.getResponseCode();
+                // consider server up when we get any 2xx or 3xx response
+                if (code >= 200 && code < 400) {
+                    return;
+                }
+            } catch (Exception ignored) {
+                // ignore and retry
+            }
+            Thread.sleep(1000);
+        }
+        throw new RuntimeException("Timed out waiting for server to be reachable at " + urlString);
     }
 }
